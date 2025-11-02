@@ -1,0 +1,10 @@
+# Compiled binary
+auto-avahi
+!auto-avahi.service
+
+# Test artifacts
+test-certs/
+test-traefik/
+
+# Environment
+.env

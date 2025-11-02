@@ -1,0 +1,30 @@
+[Unit]
+Description=Auto-Avahi mDNS Publisher for Docker Containers
+Documentation=https://github.com/Tristan-Wilson/auto-avahi
+After=docker.service avahi-daemon.service
+Requires=docker.service avahi-daemon.service
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/auto-avahi
+Restart=always
+RestartSec=10
+
+# Configuration — update these for your environment
+# Run: auto-avahi --print-env to see current values
+Environment="AVAHI_HOST_IP="
+Environment="CERT_DIR="
+Environment="CERT_DIR_CONTAINER=/certs"
+Environment="TRAEFIK_CONFIG_DIR="
+
+# Security
+User=root
+Group=docker
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=auto-avahi
+
+[Install]
+WantedBy=multi-user.target
