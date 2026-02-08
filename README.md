@@ -14,9 +14,9 @@ When the container stops, the mDNS record is removed.
 
 - **Docker Event Monitoring**: Watches for container start/stop events in real-time
 - **Traefik Label Parsing**: Extracts hostnames from `traefik.http.routers.*.rule` labels
-- **Hostname Validation**: Only publishes 2-level `.local` hostnames (e.g., `whoami.local`)
-  - Accepts: `whoami.local`, `api.local`, `grafana.local`
-  - Rejects: `app.example.local` (3+ levels not supported by mDNS)
+- **Hostname Validation**: Publishes 2-level and 3-level `.local` hostnames
+  - Accepts: `whoami.local`, `api.local`, `app.myserver.local`
+  - Rejects: `example.com` (non-.local), `a.b.c.local` (4+ levels)
 - **Certificate Generation**: Automatically generates mkcert certificates if they don't exist
 - **Certificate Validation**: Verifies certs contain valid PEM data before creating Traefik configs
 - **Traefik Config**: Generates Traefik YAML configuration files with proper container paths
@@ -225,11 +225,15 @@ The paths in the YAML config don't match where Traefik sees the certs:
    systemctl status avahi-daemon
    ```
 
-### Multi-level `.local` hostnames rejected
+### Multi-level `.local` hostnames not resolving
 
-This is intentional. Only 2-level `.local` hostnames are supported because standard mDNS resolution only works reliably with this format.
-- Valid: `whoami.local`
-- Invalid: `app.example.local` (will log a warning)
+Both 2-level (`myserver.local`) and 3-level (`app.myserver.local`) hostnames are supported. For 3-level names to resolve via mDNS, clients need `libnss-mdns` configured to allow multi-label `.local` names. Create `/etc/mdns.allow` on each client with:
+```
+.local
+.local.
+```
+- Valid: `myserver.local`, `app.myserver.local`
+- Invalid: `a.b.c.local` (4+ levels will log a warning)
 
 ### Permission denied on Docker socket
 

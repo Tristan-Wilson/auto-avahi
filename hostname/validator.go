@@ -5,9 +5,9 @@ import (
 	"strings"
 )
 
-// Validate checks if a hostname is a valid 2-level .local hostname
-// Valid: whoami.local
-// Invalid: app.example.local (warns), example.com (rejects)
+// Validate checks if a hostname is a valid .local hostname.
+// Supports 2-level (e.g., myserver.local) and 3-level (e.g., app.myserver.local) names.
+// Rejects bare ".local", non-.local names, and names with 4+ levels.
 func Validate(hostname string) (bool, string) {
 	if !strings.HasSuffix(hostname, ".local") {
 		return false, fmt.Sprintf("hostname %q does not end with .local", hostname)
@@ -17,18 +17,20 @@ func Validate(hostname string) (bool, string) {
 	withoutLocal := strings.TrimSuffix(hostname, ".local")
 	parts := strings.Split(withoutLocal, ".")
 
-	if len(parts) == 1 {
-		// Valid: "whoami.local" -> ["whoami"]
+	if withoutLocal == "" || len(parts) == 0 {
+		// Invalid: bare ".local"
+		return false, fmt.Sprintf("hostname %q is bare .local (need at least a name, e.g., myserver.local)", hostname)
+	}
+
+	if len(parts) <= 2 {
+		// Valid: "myserver.local" -> ["myserver"] (2-level)
+		// Valid: "app.myserver.local" -> ["app", "myserver"] (3-level)
 		return true, ""
 	}
 
-	if len(parts) > 1 {
-		// Invalid: "app.example.local" -> ["app", "example"]
-		return false, fmt.Sprintf("hostname %q has %d levels (only 2-level .local hostnames are supported, e.g., whoami.local)",
-			hostname, len(parts)+1)
-	}
-
-	return false, "invalid hostname format"
+	// Invalid: 4+ levels
+	return false, fmt.Sprintf("hostname %q has %d levels (only 2 or 3-level .local hostnames are supported, e.g., myserver.local or app.myserver.local)",
+		hostname, len(parts)+1)
 }
 
 // Extract extracts all valid hostnames from a list
