@@ -17,6 +17,11 @@ Environment="CERT_DIR="
 Environment="CERT_DIR_CONTAINER=/certs"
 Environment="TRAEFIK_CONFIG_DIR="
 
+# Optional: mkcert CA root directory
+# Set this if running as root but browsers trust a different user's CA.
+# Find the path: mkcert -CAROOT  (run as that user)
+#Environment="CAROOT=/home/youruser/.local/share/mkcert"
+
 # Security
 User=root
 Group=docker

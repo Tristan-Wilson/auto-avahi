@@ -14,12 +14,16 @@ import (
 // Generator handles certificate generation using mkcert
 type Generator struct {
 	certDir string
+	caRoot  string
 }
 
-// NewGenerator creates a new certificate generator
-func NewGenerator(certDir string) *Generator {
+// NewGenerator creates a new certificate generator.
+// If caRoot is non-empty, it is passed as the CAROOT environment variable
+// to mkcert so certificates are signed by the specified CA.
+func NewGenerator(certDir, caRoot string) *Generator {
 	return &Generator{
 		certDir: certDir,
+		caRoot:  caRoot,
 	}
 }
 
@@ -53,6 +57,9 @@ func (g *Generator) Generate(hostname string) error {
 	log.Printf("Generating certificate for %s...", hostname)
 
 	cmd := exec.Command("mkcert", "-cert-file", certFile, "-key-file", keyFile, hostname)
+	if g.caRoot != "" {
+		cmd.Env = append(os.Environ(), "CAROOT="+g.caRoot)
+	}
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 

@@ -18,6 +18,12 @@ type Config struct {
 
 	// TraefikConfigDir is the directory where Traefik cert YAML files are written
 	TraefikConfigDir string
+
+	// CARoot is the mkcert CA root directory. When set, it is passed as the
+	// CAROOT environment variable to mkcert so certificates are signed by a
+	// specific CA (e.g. a non-root user's CA when the service runs as root).
+	// When empty, mkcert uses its default CA for the current user.
+	CARoot string
 }
 
 // Load loads configuration from environment variables with defaults
@@ -27,6 +33,7 @@ func Load() (*Config, error) {
 		CertDir:          getEnv("CERT_DIR", "/certs"),
 		CertDirContainer: getEnv("CERT_DIR_CONTAINER", "/certs"),
 		TraefikConfigDir: getEnv("TRAEFIK_CONFIG_DIR", "/traefik/dynamic"),
+		CARoot:           os.Getenv("CAROOT"),
 	}
 
 	if cfg.HostIP == "" {

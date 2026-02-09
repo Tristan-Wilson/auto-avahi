@@ -53,11 +53,25 @@ read -rp "Host directory for Traefik dynamic configs (TRAEFIK_CONFIG_DIR) [/srv/
 TRAEFIK_DIR="${TRAEFIK_DIR:-/srv/auto-avahi/dynamic}"
 
 echo
+echo "mkcert CA root directory (CAROOT)."
+echo "  Set this if the service runs as root but your browser trusts a"
+echo "  different user's mkcert CA. Find it by running as that user:"
+echo "    mkcert -CAROOT"
+echo "  Leave blank to use the default CA for root."
+read -rp "mkcert CA root (CAROOT) []: " CAROOT
+CAROOT="${CAROOT:-}"
+
+echo
 echo "Configuration:"
 echo "  AVAHI_HOST_IP=$HOST_IP"
 echo "  CERT_DIR=$CERT_DIR"
 echo "  CERT_DIR_CONTAINER=$CERT_DIR_CONTAINER"
 echo "  TRAEFIK_CONFIG_DIR=$TRAEFIK_DIR"
+if [ -n "$CAROOT" ]; then
+  echo "  CAROOT=$CAROOT"
+else
+  echo "  CAROOT=(not set, using default)"
+fi
 echo
 
 read -rp "Proceed with installation? [Y/n] " CONFIRM
@@ -77,12 +91,23 @@ mkdir -p "$CERT_DIR" "$TRAEFIK_DIR"
 
 # Install service file with configured values
 echo "Installing systemd service..."
-sed \
-  -e "s|^Environment=\"AVAHI_HOST_IP=.*|Environment=\"AVAHI_HOST_IP=$HOST_IP\"|" \
-  -e "s|^Environment=\"CERT_DIR=.*|Environment=\"CERT_DIR=$CERT_DIR\"|" \
-  -e "s|^Environment=\"CERT_DIR_CONTAINER=.*|Environment=\"CERT_DIR_CONTAINER=$CERT_DIR_CONTAINER\"|" \
-  -e "s|^Environment=\"TRAEFIK_CONFIG_DIR=.*|Environment=\"TRAEFIK_CONFIG_DIR=$TRAEFIK_DIR\"|" \
-  "$SERVICE_FILE" > "$SERVICE_DIR/$SERVICE_FILE"
+if [ -n "$CAROOT" ]; then
+  # Uncomment and set CAROOT line
+  sed \
+    -e "s|^Environment=\"AVAHI_HOST_IP=.*|Environment=\"AVAHI_HOST_IP=$HOST_IP\"|" \
+    -e "s|^Environment=\"CERT_DIR=.*|Environment=\"CERT_DIR=$CERT_DIR\"|" \
+    -e "s|^Environment=\"CERT_DIR_CONTAINER=.*|Environment=\"CERT_DIR_CONTAINER=$CERT_DIR_CONTAINER\"|" \
+    -e "s|^Environment=\"TRAEFIK_CONFIG_DIR=.*|Environment=\"TRAEFIK_CONFIG_DIR=$TRAEFIK_DIR\"|" \
+    -e "s|^#Environment=\"CAROOT=.*|Environment=\"CAROOT=$CAROOT\"|" \
+    "$SERVICE_FILE" > "$SERVICE_DIR/$SERVICE_FILE"
+else
+  sed \
+    -e "s|^Environment=\"AVAHI_HOST_IP=.*|Environment=\"AVAHI_HOST_IP=$HOST_IP\"|" \
+    -e "s|^Environment=\"CERT_DIR=.*|Environment=\"CERT_DIR=$CERT_DIR\"|" \
+    -e "s|^Environment=\"CERT_DIR_CONTAINER=.*|Environment=\"CERT_DIR_CONTAINER=$CERT_DIR_CONTAINER\"|" \
+    -e "s|^Environment=\"TRAEFIK_CONFIG_DIR=.*|Environment=\"TRAEFIK_CONFIG_DIR=$TRAEFIK_DIR\"|" \
+    "$SERVICE_FILE" > "$SERVICE_DIR/$SERVICE_FILE"
+fi
 
 # Reload and enable
 echo "Enabling service..."

@@ -27,7 +27,7 @@ func NewApp(cfg *config.Config) *App {
 	return &App{
 		cfg:              cfg,
 		publisher:        avahi.NewPublisher(cfg.HostIP),
-		certGenerator:    certs.NewGenerator(cfg.CertDir),
+		certGenerator:    certs.NewGenerator(cfg.CertDir, cfg.CARoot),
 		traefikGenerator: certs.NewTraefikConfigGenerator(cfg.TraefikConfigDir, cfg.CertDirContainer),
 	}
 }
@@ -112,6 +112,12 @@ func main() {
 
 	log.Printf("Configuration: HostIP=%s, CertDir=%s, CertDirContainer=%s, TraefikConfigDir=%s",
 		cfg.HostIP, cfg.CertDir, cfg.CertDirContainer, cfg.TraefikConfigDir)
+
+	if cfg.CARoot != "" {
+		log.Printf("mkcert CA root: %s (from CAROOT env)", cfg.CARoot)
+	} else {
+		log.Printf("mkcert CA root: not configured, using default for current user")
+	}
 
 	// Create application
 	app := NewApp(cfg)
