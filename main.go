@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/Tristan-Wilson/auto-avahi/avahi"
 	"github.com/Tristan-Wilson/auto-avahi/certs"
@@ -142,6 +143,23 @@ func main() {
 	errChan := make(chan error, 1)
 	go func() {
 		errChan <- watcher.Watch(ctx)
+	}()
+
+	// Start mDNS health check loop — detects and recovers from avahi-daemon restarts
+	go func() {
+		ticker := time.NewTicker(30 * time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				if !app.publisher.CheckHealth() {
+					log.Println("Detected stale mDNS registrations (avahi-daemon likely restarted), refreshing all...")
+					app.publisher.RefreshAll()
+				}
+			}
+		}
 	}()
 
 	log.Println("Watching Docker events... (Press Ctrl+C to stop)")
