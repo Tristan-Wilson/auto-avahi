@@ -1,8 +1,9 @@
 [Unit]
-Description=Auto-Avahi mDNS Publisher for Docker Containers
+Description=Auto-Avahi: TLS cert + Traefik config automation for Docker (with optional mDNS)
 Documentation=https://github.com/Tristan-Wilson/auto-avahi
 After=docker.service avahi-daemon.service
-Requires=docker.service avahi-daemon.service
+Requires=docker.service
+Wants=avahi-daemon.service
 
 [Service]
 Type=simple
@@ -12,7 +13,20 @@ RestartSec=10
 
 # Configuration — update these for your environment
 # Run: auto-avahi --print-env to see current values
+
+# Required when MDNS_ENABLE=true; ignored otherwise.
 Environment="AVAHI_HOST_IP="
+
+# Comma-separated list of allowed hostname suffixes (without leading dot).
+# Hostnames extracted from Traefik labels must end with one of these.
+# Default behavior preserves the original .local-only mode.
+Environment="HOSTNAME_SUFFIXES=local"
+
+# Set to "false" to skip mDNS publishing entirely (useful when DNS is
+# handled by another resolver). When false, AVAHI_HOST_IP is not required
+# and no avahi-publish processes are spawned.
+Environment="MDNS_ENABLE=true"
+
 Environment="CERT_DIR="
 Environment="CERT_DIR_CONTAINER=/certs"
 Environment="TRAEFIK_CONFIG_DIR="

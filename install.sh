@@ -20,8 +20,30 @@ if [ ! -f "$BINARY_NAME" ]; then
   exit 1
 fi
 
-# Check dependencies
-for cmd in mkcert avahi-publish docker; do
+echo "=== auto-avahi installer ==="
+echo
+
+# Choose mode
+echo "auto-avahi can run with or without mDNS publishing."
+echo "  - mDNS on:  publishes hostnames via avahi-publish for LAN discovery (.local)"
+echo "  - mDNS off: only generates TLS certs and Traefik configs (use when DNS is"
+echo "              handled elsewhere, e.g. split-horizon, public DNS, /etc/hosts)"
+echo
+read -rp "Enable mDNS publishing? [Y/n] " MDNS_CHOICE
+if [[ "$MDNS_CHOICE" =~ ^[Nn] ]]; then
+  MDNS_ENABLE="false"
+else
+  MDNS_ENABLE="true"
+fi
+
+# Always-required dependencies
+REQUIRED_CMDS=(mkcert docker)
+# avahi-publish only required when MDNS_ENABLE=true
+if [ "$MDNS_ENABLE" = "true" ]; then
+  REQUIRED_CMDS+=(avahi-publish)
+fi
+
+for cmd in "${REQUIRED_CMDS[@]}"; do
   if ! command -v "$cmd" &>/dev/null; then
     echo "ERROR: '$cmd' not found. Please install it first."
     case "$cmd" in
@@ -33,14 +55,19 @@ for cmd in mkcert avahi-publish docker; do
   fi
 done
 
-echo "=== auto-avahi installer ==="
+# Hostname suffix(es)
 echo
+read -rp "Hostname suffix(es), comma-separated (HOSTNAME_SUFFIXES) [local]: " HOSTNAME_SUFFIXES
+HOSTNAME_SUFFIXES="${HOSTNAME_SUFFIXES:-local}"
 
-# Collect configuration
-read -rp "Server LAN IP address (AVAHI_HOST_IP): " HOST_IP
-if [ -z "$HOST_IP" ]; then
-  echo "ERROR: IP address is required."
-  exit 1
+# Server LAN IP (only when mDNS on)
+HOST_IP=""
+if [ "$MDNS_ENABLE" = "true" ]; then
+  read -rp "Server LAN IP address (AVAHI_HOST_IP): " HOST_IP
+  if [ -z "$HOST_IP" ]; then
+    echo "ERROR: IP address is required when mDNS is enabled."
+    exit 1
+  fi
 fi
 
 read -rp "Host directory for TLS certificates (CERT_DIR) [/srv/auto-avahi/certs]: " CERT_DIR
@@ -63,6 +90,8 @@ CAROOT="${CAROOT:-}"
 
 echo
 echo "Configuration:"
+echo "  MDNS_ENABLE=$MDNS_ENABLE"
+echo "  HOSTNAME_SUFFIXES=$HOSTNAME_SUFFIXES"
 echo "  AVAHI_HOST_IP=$HOST_IP"
 echo "  CERT_DIR=$CERT_DIR"
 echo "  CERT_DIR_CONTAINER=$CERT_DIR_CONTAINER"
@@ -89,25 +118,21 @@ chmod 755 "$INSTALL_DIR/$BINARY_NAME"
 echo "Creating directories..."
 mkdir -p "$CERT_DIR" "$TRAEFIK_DIR"
 
-# Install service file with configured values
+# Install service file with configured values.
+# All Environment= lines in the template are replaced.
 echo "Installing systemd service..."
+SED_ARGS=(
+  -e "s|^Environment=\"AVAHI_HOST_IP=.*|Environment=\"AVAHI_HOST_IP=$HOST_IP\"|"
+  -e "s|^Environment=\"HOSTNAME_SUFFIXES=.*|Environment=\"HOSTNAME_SUFFIXES=$HOSTNAME_SUFFIXES\"|"
+  -e "s|^Environment=\"MDNS_ENABLE=.*|Environment=\"MDNS_ENABLE=$MDNS_ENABLE\"|"
+  -e "s|^Environment=\"CERT_DIR=.*|Environment=\"CERT_DIR=$CERT_DIR\"|"
+  -e "s|^Environment=\"CERT_DIR_CONTAINER=.*|Environment=\"CERT_DIR_CONTAINER=$CERT_DIR_CONTAINER\"|"
+  -e "s|^Environment=\"TRAEFIK_CONFIG_DIR=.*|Environment=\"TRAEFIK_CONFIG_DIR=$TRAEFIK_DIR\"|"
+)
 if [ -n "$CAROOT" ]; then
-  # Uncomment and set CAROOT line
-  sed \
-    -e "s|^Environment=\"AVAHI_HOST_IP=.*|Environment=\"AVAHI_HOST_IP=$HOST_IP\"|" \
-    -e "s|^Environment=\"CERT_DIR=.*|Environment=\"CERT_DIR=$CERT_DIR\"|" \
-    -e "s|^Environment=\"CERT_DIR_CONTAINER=.*|Environment=\"CERT_DIR_CONTAINER=$CERT_DIR_CONTAINER\"|" \
-    -e "s|^Environment=\"TRAEFIK_CONFIG_DIR=.*|Environment=\"TRAEFIK_CONFIG_DIR=$TRAEFIK_DIR\"|" \
-    -e "s|^#Environment=\"CAROOT=.*|Environment=\"CAROOT=$CAROOT\"|" \
-    "$SERVICE_FILE" > "$SERVICE_DIR/$SERVICE_FILE"
-else
-  sed \
-    -e "s|^Environment=\"AVAHI_HOST_IP=.*|Environment=\"AVAHI_HOST_IP=$HOST_IP\"|" \
-    -e "s|^Environment=\"CERT_DIR=.*|Environment=\"CERT_DIR=$CERT_DIR\"|" \
-    -e "s|^Environment=\"CERT_DIR_CONTAINER=.*|Environment=\"CERT_DIR_CONTAINER=$CERT_DIR_CONTAINER\"|" \
-    -e "s|^Environment=\"TRAEFIK_CONFIG_DIR=.*|Environment=\"TRAEFIK_CONFIG_DIR=$TRAEFIK_DIR\"|" \
-    "$SERVICE_FILE" > "$SERVICE_DIR/$SERVICE_FILE"
+  SED_ARGS+=(-e "s|^#Environment=\"CAROOT=.*|Environment=\"CAROOT=$CAROOT\"|")
 fi
+sed "${SED_ARGS[@]}" "$SERVICE_FILE" > "$SERVICE_DIR/$SERVICE_FILE"
 
 # Reload and enable
 echo "Enabling service..."

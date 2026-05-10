@@ -5,39 +5,58 @@ import (
 	"strings"
 )
 
-// Validate checks if a hostname is a valid .local hostname.
-// Supports 2-level (e.g., myserver.local) and 3-level (e.g., app.myserver.local) names.
-// Rejects bare ".local", non-.local names, and names with 4+ levels.
-func Validate(hostname string) (bool, string) {
-	if !strings.HasSuffix(hostname, ".local") {
-		return false, fmt.Sprintf("hostname %q does not end with .local", hostname)
+// Options controls hostname validation.
+type Options struct {
+	// Suffixes is the list of allowed hostname suffixes (without leading dot).
+	// A hostname must end with ".<suffix>" for one of these to be considered valid.
+	Suffixes []string
+
+	// EnforceDepthLimit, when true, additionally requires that the hostname have
+	// 1 or 2 subdomain labels before the suffix (e.g. "app.local" or
+	// "app.host.local" but not "a.b.c.local"). This is the recommended setting
+	// for mDNS publishing where deep names are fragile to resolve. For
+	// non-mDNS use (DNS handled elsewhere), set to false to allow any depth.
+	EnforceDepthLimit bool
+}
+
+// Validate checks whether a hostname satisfies the given Options.
+// Returns (true, "") if valid; (false, reason) otherwise.
+func Validate(hostname string, opts Options) (bool, string) {
+	suffix, ok := matchSuffix(hostname, opts.Suffixes)
+	if !ok {
+		return false, fmt.Sprintf("hostname %q does not end with any configured suffix (%s)",
+			hostname, strings.Join(opts.Suffixes, ", "))
 	}
 
-	// Remove .local suffix and count parts
-	withoutLocal := strings.TrimSuffix(hostname, ".local")
-	parts := strings.Split(withoutLocal, ".")
+	// Strip the suffix and the dot before it. The matched suffix is guaranteed
+	// to be preceded by a dot OR to be the entire hostname (which is bare and
+	// always rejected below).
+	withoutSuffix := strings.TrimSuffix(hostname, suffix)
+	withoutSuffix = strings.TrimSuffix(withoutSuffix, ".")
 
-	if withoutLocal == "" || len(parts) == 0 {
-		// Invalid: bare ".local"
-		return false, fmt.Sprintf("hostname %q is bare .local (need at least a name, e.g., myserver.local)", hostname)
+	if withoutSuffix == "" {
+		return false, fmt.Sprintf("hostname %q is bare (need at least one subdomain, e.g., myserver.%s)",
+			hostname, suffix)
 	}
 
-	if len(parts) <= 2 {
-		// Valid: "myserver.local" -> ["myserver"] (2-level)
-		// Valid: "app.myserver.local" -> ["app", "myserver"] (3-level)
+	if !opts.EnforceDepthLimit {
 		return true, ""
 	}
 
-	// Invalid: 4+ levels
-	return false, fmt.Sprintf("hostname %q has %d levels (only 2 or 3-level .local hostnames are supported, e.g., myserver.local or app.myserver.local)",
-		hostname, len(parts)+1)
+	parts := strings.Split(withoutSuffix, ".")
+	if len(parts) <= 2 {
+		return true, ""
+	}
+
+	return false, fmt.Sprintf("hostname %q has %d labels before suffix %q (mDNS-mode validation allows 1 or 2; e.g., myserver.%s or app.myserver.%s)",
+		hostname, len(parts), suffix, suffix, suffix)
 }
 
-// Extract extracts all valid hostnames from a list
-// Returns valid hostnames and warnings for invalid ones
-func Extract(hostnames []string) (valid []string, warnings []string) {
+// Extract filters a list of hostnames using Validate and returns the valid ones
+// alongside human-readable warnings for the rejects.
+func Extract(hostnames []string, opts Options) (valid []string, warnings []string) {
 	for _, hostname := range hostnames {
-		ok, warning := Validate(hostname)
+		ok, warning := Validate(hostname, opts)
 		if ok {
 			valid = append(valid, hostname)
 		} else if warning != "" {
@@ -45,4 +64,15 @@ func Extract(hostnames []string) (valid []string, warnings []string) {
 		}
 	}
 	return valid, warnings
+}
+
+// matchSuffix returns the suffix that the hostname ends with (preceded by a dot),
+// or an exact-match suffix if the hostname IS the bare suffix.
+func matchSuffix(hostname string, suffixes []string) (string, bool) {
+	for _, s := range suffixes {
+		if strings.HasSuffix(hostname, "."+s) || hostname == s {
+			return s, true
+		}
+	}
+	return "", false
 }
